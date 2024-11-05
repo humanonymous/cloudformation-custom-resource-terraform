@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFormation Custom Resource Terraform Configuration Test
+
+Parameters:
+  ServiceToken:
+    Type: String
+    Description: Service Token to use in Custom Resources
+
+Resources:
+  LogsLogGroupCustomResource:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    Properties:
+      LogGroupName: "dev-test-log-group-for-terraform"
+
+  CustomTerraformExecutionLogsTargetArn:
+    Type: Custom::TerraformConfiguration
+    Properties:
+      ServiceToken: !Ref ServiceToken
+      Backend: "Auto"
+      ExecutionLogsTargetArn: !GetAtt LogsLogGroupCustomResource.Arn
+      Configuration: |
+        terraform {
+          backend "s3" {}
+        }
+
+        output "result" {
+          value = "success"
+        }
+
+Outputs:
+  Result:
+    Value: !GetAtt CustomTerraformExecutionLogsTargetArn.result
+    Description: "Result output from Terraform"

@@ -1,0 +1,97 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFormation Custom Resource Terraform Configuration Test
+
+Parameters:
+  ServiceToken:
+    Type: String
+    Description: Service Token to use in Custom Resources
+
+Resources:
+  CustomTerraformConfigurationVariables:
+    Type: Custom::TerraformConfiguration
+    Properties:
+      ServiceToken: !Ref ServiceToken
+      Variables:
+        string_from_cloudformation: "Hello, String!"
+        number_from_cloudformation: 77
+        bool_from_cloudformation: true
+        list_from_cloudformation: ["Hello", "List", "!"]
+        set_from_cloudformation: ["Hello", "Set", "!"]
+        map_from_cloudformation: { "Key1": "Hello", "Key2": "Map", "Key3": "!" }
+      Configuration: |
+        terraform {
+          backend "local" {}
+        }
+
+        variable "string_from_cloudformation" {
+          type = string
+        }
+
+        variable "number_from_cloudformation" {
+          type = number
+        }
+
+        variable "bool_from_cloudformation" {
+          type = bool
+        }
+
+        variable "list_from_cloudformation" {
+          type = list(string)
+        }
+
+        variable "set_from_cloudformation" {
+          type = set(string)
+        }
+
+        variable "map_from_cloudformation" {
+        }
+
+        output "string" {
+          value = var.string_from_cloudformation
+        }
+
+        output "number" {
+          value = var.number_from_cloudformation
+        }
+
+        output "bool" {
+          value = var.bool_from_cloudformation
+        }
+
+        output "list" {
+          value = var.list_from_cloudformation
+        }
+
+        output "set" {
+          value = var.set_from_cloudformation
+        }
+
+        output "map" {
+          # since CloudFormation outputs doesn't support maps, we have to use jsonencode
+          value = jsonencode(var.map_from_cloudformation)
+        }
+
+Outputs:
+  String:
+    Value: !GetAtt CustomTerraformConfigurationVariables.string
+    Description: "String output from Terraform"
+
+  Number:
+    Value: !GetAtt CustomTerraformConfigurationVariables.number
+    Description: "Number output from Terraform"
+
+  Boolean:
+    Value: !GetAtt CustomTerraformConfigurationVariables.bool
+    Description: "Bool output from Terraform"
+
+  List:
+    Value: !Join [", ", !GetAtt CustomTerraformConfigurationVariables.list]
+    Description: "List output from Terraform"
+
+  Set:
+    Value: !Join [", ", !GetAtt CustomTerraformConfigurationVariables.set]
+    Description: "Set output from Terraform"
+
+  MapAsString:
+    Value: !GetAtt CustomTerraformConfigurationVariables.map
+    Description: "Map output from Terraform"

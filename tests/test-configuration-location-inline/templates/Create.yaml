@@ -1,0 +1,26 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFormation Custom Resource Terraform Configuration Test
+
+Parameters:
+  ServiceToken:
+    Type: String
+    Description: Service Token to use in Custom Resources
+
+Resources:
+  CustomTerraformConfigurationLocationInline:
+    Type: Custom::TerraformConfiguration
+    Properties:
+      ServiceToken: !Ref ServiceToken
+      Configuration: |
+        terraform {
+            backend "local" {}
+        }
+
+        output "result" {
+           value = "success"
+        }
+
+Outputs:
+  Result:
+    Value: !GetAtt CustomTerraformConfigurationLocationInline.result
+    Description: "Result output from Terraform"

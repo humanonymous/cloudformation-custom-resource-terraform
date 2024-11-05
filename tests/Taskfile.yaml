@@ -1,0 +1,179 @@
+version: "3"
+
+set:
+  - errexit
+  - nounset
+  - pipefail
+
+# Define the includes for each test folder
+includes:
+  # It is important to test outputs first as we rely on them for the rest of the tests
+  test-outputs:
+    taskfile: ./test-outputs/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-outputs
+  # It is important to test outputs first as we rely on them for the rest of the tests
+  test-outputs-undefined-in-terraform-configuration:
+    taskfile: ./test-outputs-undefined-in-terraform-configuration/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-outputs-undefined-in-terraform-configuration
+  test-backend-auto:
+    taskfile: ./test-backend-auto/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-backend-auto
+  test-backend-inline:
+    taskfile: ./test-backend-inline/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-backend-inline
+  test-backend-inline-malformed:
+    taskfile: ./test-backend-inline-malformed/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-backend-inline-malformed
+  test-backend-malformed:
+    taskfile: ./test-backend-malformed/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-backend-malformed
+  test-backend-not-set:
+    taskfile: ./test-backend-not-set/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-backend-not-set
+  test-configuration-location-http:
+    taskfile: ./test-configuration-location-http/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-configuration-location-http
+  test-configuration-location-http-inaccessible:
+    taskfile: ./test-configuration-location-http-inaccessible/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-configuration-location-http-inaccessible
+  test-configuration-location-inline:
+    taskfile: ./test-configuration-location-inline/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-configuration-location-inline
+  test-configuration-location-s3:
+    taskfile: ./test-configuration-location-s3/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-configuration-location-s3
+  test-configuration-location-s3-inaccessible:
+    taskfile: ./test-configuration-location-s3-inaccessible/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-configuration-location-s3-inaccessible
+  test-configuration-malformed:
+    taskfile: ./test-configuration-malformed/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-configuration-malformed
+  test-environment:
+    taskfile: ./test-environment/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-environment
+  test-environment-malformed:
+    taskfile: ./test-environment-malformed/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-environment-malformed
+  test-execution-logs-target-arn:
+    taskfile: ./test-execution-logs-target-arn/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-execution-logs-target-arn
+  test-variables:
+    taskfile: ./test-variables/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-variables
+  test-variables-malformed:
+    taskfile: ./test-variables-malformed/Taskfile.yaml
+    internal: true
+    vars:
+      TEST_NAME: test-variables-malformed
+
+
+tasks:
+  test-all:
+    cmds:
+      - task: test-outputs
+      - task: test-outputs-undefined-in-terraform-configuration
+      - task: test-backend-auto
+      - task: test-backend-inline
+      - task: test-backend-inline-malformed
+      - task: test-backend-malformed
+      - task: test-backend-not-set
+      - task: test-configuration-location-http
+      - task: test-configuration-location-http-inaccessible
+      - task: test-configuration-location-inline
+      - task: test-configuration-location-s3
+      - task: test-configuration-location-s3-inaccessible
+      - task: test-configuration-malformed
+      - task: test-environment
+      - task: test-environment-malformed
+      - task: test-execution-logs-target-arn
+      - task: test-variables
+      - task: test-variables-malformed
+
+  test-outputs:
+    cmd:
+      task: test-outputs:run-test
+  test-outputs-undefined-in-terraform-configuration:
+    cmd:
+      task: test-outputs-undefined-in-terraform-configuration:run-test
+  test-backend-auto:
+    cmd:
+      task: test-backend-auto:run-test
+  test-backend-inline:
+    cmd:
+      task: test-backend-inline:run-test
+  test-backend-inline-malformed:
+    cmd:
+      task: test-backend-inline-malformed:run-test
+  test-backend-malformed:
+    cmd:
+      task: test-backend-malformed:run-test
+  test-backend-not-set:
+    cmd:
+      task: test-backend-not-set:run-test
+  test-configuration-location-http:
+    cmd:
+      task: test-configuration-location-http:run-test
+  test-configuration-location-http-inaccessible:
+    cmd:
+      task: test-configuration-location-http-inaccessible:run-test
+  test-configuration-location-inline:
+    cmd:
+      task: test-configuration-location-inline:run-test
+  test-configuration-location-s3:
+    cmd:
+      task: test-configuration-location-s3:run-test
+  test-configuration-location-s3-inaccessible:
+    cmd:
+      task: test-configuration-location-s3-inaccessible:run-test
+  test-configuration-malformed:
+    cmd:
+      task: test-configuration-malformed:run-test
+  test-environment:
+    cmd:
+      task: test-environment:run-test
+  test-environment-malformed:
+    cmd:
+      task: test-environment-malformed:run-test
+  test-execution-logs-target-arn:
+    cmd:
+      task: test-execution-logs-target-arn:run-test
+  test-variables:
+    cmd:
+      task: test-variables:run-test
+  test-variables-malformed:
+    cmd:
+      task: test-variables-malformed:run-test

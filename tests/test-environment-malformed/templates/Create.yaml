@@ -1,0 +1,37 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFormation Custom Resource Terraform Configuration Test
+
+Parameters:
+  ServiceToken:
+    Type: String
+    Description: Service Token to use in Custom Resources
+
+Resources:
+  CustomTerraformConfigurationBackendInlineMalformed:
+    Type: Custom::TerraformConfiguration
+    Properties:
+      ServiceToken: !Ref ServiceToken
+      Environment:
+        TF_VAR_variable_from_environment: "Hello, World!"
+        Object:
+          Foo: Bar
+        Array:
+          - Foo
+          - Bar
+      Configuration: |
+        terraform {
+          backend "local" {}
+        }
+
+        variable "variable_from_environment" {
+          type = string
+        }
+
+        output "result" {
+          value = var.variable_from_environment
+        }
+
+Outputs:
+  Result:
+    Value: !GetAtt CustomTerraformConfigurationBackendInlineMalformed.result
+    Description: "Result output from Terraform"

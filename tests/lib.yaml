@@ -1,0 +1,275 @@
+version: "3"
+
+set:
+  - errexit
+  - nounset
+  - pipefail
+
+tasks:
+  set-up:empty:
+    requires:
+      vars:
+        - TEST_NAME
+    cmds:
+      - echo "⚙️ Setting up test {{.TEST_NAME}} .."
+
+  set-up:s3:common-resources:
+    requires:
+      vars:
+        - TEST_NAME
+    cmds:
+      - echo "⚙️ Setting up common resources for test {{.TEST_NAME}} .."
+      - aws s3 sync --delete ../resources s3://{{.TESTS_S3_PRIVATE_BUCKET}}/{{.TESTS_S3_PRIVATE_PREFIX}}/resources
+
+  set-up:s3:test-resources:
+    requires:
+      vars:
+        - TEST_NAME
+        - RESOURCES_DIR
+    cmds:
+      - echo "⚙️ Setting up test {{.TEST_NAME}} .."
+      - aws s3 sync --delete {{.RESOURCES_DIR}} s3://{{.TESTS_S3_PRIVATE_BUCKET}}/{{.TESTS_S3_PRIVATE_PREFIX}}/{{.TEST_NAME}}/resources
+
+  set-up:s3:test-resources-public:
+    requires:
+      vars:
+        - TEST_NAME
+        - RESOURCES_DIR
+    cmds:
+      - echo "⚙️ Setting up test {{.TEST_NAME}} .."
+      - aws s3 sync --delete {{.RESOURCES_DIR}} s3://{{.TESTS_S3_PUBLIC_BUCKET}}/{{.TESTS_S3_PUBBLIC_PREFIX}}/{{.TEST_NAME}}/resources
+
+
+  deploy-stack:
+    requires:
+      vars:
+        - TEST_NAME
+        - TEMPLATE_FILE
+    ignore_error: true
+    cmds:
+      - |
+        echo "🛳️ Deploying stack \"{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}\" with template \"{{.TEMPLATE_FILE}}\" .."
+        aws cloudformation deploy \
+          --stack-name "{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}" \
+          --template-file {{.TEMPLATE_FILE}} \
+          --no-fail-on-empty-changeset \
+          --parameter-overrides ServiceToken="{{.TESTS_SERVICE_TOKEN}}" {{.PARAMETER_OVERRIDES}}
+
+  print-stack-resources:
+    requires:
+      vars:
+        - TEST_NAME
+    cmds:
+      - |
+        echo "🧱 Getting resources table for stack \"{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}\" .."
+        aws cloudformation list-stack-resources \
+          --stack-name "{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}" \
+          --query 'StackResourceSummaries[].{
+            LogicalResourceId:LogicalResourceId,
+            PhysicalResourceId:PhysicalResourceId,
+            ResourceType:ResourceType,
+            ResourceStatus:ResourceStatus
+            }' \
+          --output table
+
+  print-stack-outputs:
+    requires:
+      vars:
+        - TEST_NAME
+    cmds:
+      - |
+        echo "📤 Getting outputs for stack \"{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}\" .."
+        aws cloudformation describe-stacks \
+          --stack-name "{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}" \
+          --query 'Stacks[0].Outputs[]' \
+          --output table
+
+  cleanup:
+    requires:
+      vars:
+        - TEST_NAME
+    cmds:
+      - echo "🧼 Cleaning up test {{.TEST_NAME}}.."
+      - |
+        # Check if the stack exists before attempting to delete it
+        STACK_ID=$(aws cloudformation describe-stacks \
+          --stack-name "{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}" \
+          --query 'Stacks[0].StackId' \
+          --output text || true)
+
+        # Check if the stack doesn't exist or another error occurred
+        if [[ -z "${STACK_ID}" ]]; then
+          echo "Stack {{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}} does not exist. Nothing to clean up."
+          exit 0
+        fi
+
+        aws cloudformation delete-stack \
+          --stack-name "{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}" \
+          --deletion-mode STANDARD
+
+        aws cloudformation wait stack-delete-complete \
+          --stack-name {{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}
+
+        STATUS=$(aws cloudformation list-stacks \
+          --query "StackSummaries[?StackId=='${STACK_ID}'].StackStatus" \
+          --output text)
+
+        if [ "${STATUS}" == "DELETE_FAILED" ]; then
+          echo "Stack deletion failed: ${STACK_ID}, forcing it to be deleted."
+
+          aws cloudformation delete-stack \
+            --stack-name "{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}" \
+            --deletion-mode FORCE_DELETION
+
+          aws cloudformation wait stack-delete-complete \
+            --stack-name {{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}
+
+          STATUS=$(aws cloudformation list-stacks \
+            --query "StackSummaries[?StackId=='${STACK_ID}'].StackStatus" \
+            --output text)
+
+          echo "Stack deletion status: ${STATUS}"
+        fi
+
+  # Internal tasks used as part of the testing process
+  assert-stack-status:
+    desc: "Assert stack status matches the expected value"
+    requires:
+      vars:
+        - TEST_NAME
+        - EXPECTED_STATUS
+    cmds:
+      - |
+        echo "🧪 Running assert-stack-status to check that stack \"{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}\" is in {{.EXPECTED_STATUS}} status .."
+        STATUS=$(aws cloudformation describe-stacks --stack-name "{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}" --query 'Stacks[0].StackStatus' --output text)
+        if [ "${STATUS}" != "{{.EXPECTED_STATUS}}" ]; then
+          echo "❌ Expected stack status {{.EXPECTED_STATUS}}, but got ${STATUS} instead"
+          exit 1
+        else
+          echo "✅ Stack has the expected status {{.EXPECTED_STATUS}}"
+        fi
+
+  assert-resource-present:
+    desc: "Assert that a specific resource is present in the stack"
+    requires:
+      vars:
+        - TEST_NAME
+        - RESOURCE_ID
+    cmds:
+      - |
+        echo "🧪 Running assert-resource-present to check that {{.RESOURCE_ID}} is present in the stack .."
+        RESOURCE=$(aws cloudformation describe-stack-resources --stack-name "{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}" --query 'StackResources[?LogicalResourceId==`{{.RESOURCE_ID}}`]' --output text)
+        if [ -z "${RESOURCE}" ]; then
+          echo "❌ Resource {{.RESOURCE_ID}} not found"
+          exit 1
+        else
+          echo "✅ Resource {{.RESOURCE_ID}} found"
+        fi
+
+  assert-resource-absent:
+    desc: "Assert that a specific resource is absent from the stack"
+    requires:
+      vars:
+        - TEST_NAME
+        - RESOURCE_ID
+    cmds:
+      - |
+        echo "🧪 Running assert-resource-absent to check that {{.RESOURCE_ID}} is not present in the stack .."
+        RESOURCE=$(aws cloudformation describe-stack-resources --stack-name "{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}" --query 'StackResources[?LogicalResourceId==`{{.RESOURCE_ID}}`]' --output text)
+        if [ ! -z "${RESOURCE}" ]; then
+          echo "❌ Resource {{.RESOURCE_ID}} exists in the stack"
+          exit 1
+        else
+          echo "✅ Resource {{.RESOURCE_ID}} not found"
+        fi
+
+  assert-resource-status:
+    desc: "Assert that a specific resource has the expected status"
+    requires:
+      vars:
+        - TEST_NAME
+        - RESOURCE_ID
+        - EXPECTED_STATUS
+    cmds:
+      - |
+        echo "🧪 Running assert-resource-status to check that {{.RESOURCE_ID}} has \"{{.EXPECTED_STATUS}}\" status .."
+        STATUS=$(aws cloudformation describe-stack-resources --stack-name "{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}" --query 'StackResources[?LogicalResourceId==`{{.RESOURCE_ID}}`].ResourceStatus' --output text)
+        if [ "${STATUS}" != "{{.EXPECTED_STATUS}}" ]; then
+          echo "❌ Expected resource {{.RESOURCE_ID}} to have status {{.EXPECTED_STATUS}}, but got ${STATUS} instead"
+          exit 1
+        else
+          echo "✅ Resource {{.RESOURCE_ID}) has the expected status {{.EXPECTED_STATUS}}"
+        fi
+
+  assert-events-contain:
+    desc: "Check if an event with the expected reason is present in stack events"
+    requires:
+      vars:
+        - TEST_NAME
+        - EXPECTED_REASON
+    cmds:
+      - |
+        echo "🧪 Running assert-events-contain to check that events exist with \"{{.EXPECTED_REASON}}\" reason .."
+        STACK_ID=$(aws cloudformation describe-stacks \
+          --stack-name "{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}" \
+          --query 'Stacks[0].StackId' \
+          --output text)
+        EVENTS=$(aws cloudformation describe-stack-events --stack-name "$STACK_ID" --query 'StackEvents[?ResourceStatusReason!='null' && contains(ResourceStatusReason, `{{.EXPECTED_REASON}}`)]' --output text)
+        if [ -z "$EVENTS" ]; then
+          echo "❌ No events found with reason {{.EXPECTED_REASON}}"
+          exit 1
+        else
+          echo "✅ Found event(s) with reason {{.EXPECTED_REASON}}"
+        fi
+
+  assert-output-present:
+    desc: "Assert that a specific output is present in the stack"
+    requires:
+      vars:
+        - TEST_NAME
+        - OUTPUT_KEY
+    cmds:
+      - |
+        echo "🧪 Running assert-output-present to check that output {{.OUTPUT_KEY}} is present in the stack .."
+        OUTPUT=$(aws cloudformation describe-stacks --stack-name "{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}" --query 'Stacks[0].Outputs[?OutputKey==`{{.OUTPUT_KEY}}`].OutputValue' --output text)
+        if [ -z "${OUTPUT}" ]; then
+          echo "❌ Output {{.OUTPUT_KEY}} not found"
+          exit 1
+        else
+          echo "✅ Output {{.OUTPUT_KEY}} found"
+        fi
+
+  assert-output-absent:
+    desc: "Assert that a specific output is absent from the stack"
+    requires:
+      vars:
+        - TEST_NAME
+        - OUTPUT_KEY
+    cmds:
+      - |
+        echo "🧪 Running assert-output-absent to check that output {{.OUTPUT_KEY}} is not present in the stack .."
+        OUTPUT=$(aws cloudformation describe-stacks --stack-name "{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}" --query 'Stacks[0].Outputs[?OutputKey==`{{.OUTPUT_KEY}}`].OutputValue' --output text)
+        if [ ! -z "${OUTPUT}" ]; then
+          echo "❌ Output {{.OUTPUT_KEY}} exists, but it should be absent"
+          exit 1
+        else
+          echo "✅ Output {{.OUTPUT_KEY}} not found"
+        fi
+
+  assert-output-value:
+    desc: "Assert that a specific output has the expected value"
+    requires:
+      vars:
+        - TEST_NAME
+        - OUTPUT_KEY
+        - EXPECTED_VALUE
+    cmds:
+      - |
+        echo "🧪 Running assert-output-value to check that output {{.OUTPUT_KEY}} value is {{.EXPECTED_VALUE}} .."
+        OUTPUT=$(aws cloudformation describe-stacks --stack-name "{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}" --query 'Stacks[0].Outputs[?OutputKey==`{{.OUTPUT_KEY}}`].OutputValue' --output text)
+        if [ "${OUTPUT}" != "{{.EXPECTED_VALUE}}" ]; then
+          echo "❌ Expected output {{.OUTPUT_KEY}} to have value {{.EXPECTED_VALUE}}, but got ${OUTPUT}"
+          exit 1
+        else
+          echo "✅ Output {{.OUTPUT_KEY}} matches the expected value: {{.EXPECTED_VALUE}}"
+        fi

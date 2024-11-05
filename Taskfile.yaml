@@ -1,0 +1,80 @@
+version: "3"
+
+set:
+  - errexit
+  - nounset
+  - pipefail
+
+dotenv:
+  - Taskfile.env
+
+includes:
+  tests:
+    taskfile: ./tests/Taskfile.yaml
+
+tasks:
+  default:
+    cmds:
+      - defer: { task: cleanup }
+      - task: build
+      - task: deploy
+      - task: test
+
+  build:
+    cmds:
+      - |
+        # Download terraform binary
+        TERRAFORM_VERSION=1.9.8
+        TEMP_DOWNLOAD_DIR=$(mktemp -d)
+        ARCHIVE_LOCATION="${TEMP_DOWNLOAD_DIR}/terraform.zip"
+        curl --silent --location --output "${ARCHIVE_LOCATION}" https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip
+        unzip -p "${ARCHIVE_LOCATION}" terraform > src/terraform
+        chmod +x src/terraform
+      - |
+        poetry install --only main --sync
+        mkdir -p dist/lambda-package
+        cp -r .venv/lib/python*/site-packages/* dist/lambda-package/
+        cp -r src/* dist/lambda-package/
+
+  deploy:
+    requires:
+      vars:
+        - CLOUDFORMATION_DEPLOYMENT_S3_BUCKET
+        - CLOUDFORMATION_DEPLOYMENT_S3_PREFIX
+        - STACK_PARAM_FUNCTION_NAME
+    cmds:
+      - |
+        TEMP_TEMPLATE_FILE=$(mktemp)
+
+        # Package
+        aws cloudformation package \
+          --template-file infrastructure/cloudformation-custom-resource-terraform.yaml \
+          --s3-bucket "${CLOUDFORMATION_DEPLOYMENT_S3_BUCKET}" \
+          --s3-prefix "${CLOUDFORMATION_DEPLOYMENT_S3_PREFIX}" \
+          --output-template-file "${TEMP_TEMPLATE_FILE}"
+
+        # Deploy
+        aws cloudformation deploy \
+          --stack-name "cloudformation-custom-resource-terraform" \
+          --s3-bucket "${CLOUDFORMATION_DEPLOYMENT_S3_BUCKET}"  \
+          --s3-prefix "${CLOUDFORMATION_DEPLOYMENT_S3_PREFIX}" \
+          --template-file "${TEMP_TEMPLATE_FILE}" \
+          --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
+          --parameter-overrides \
+              FunctionName="${STACK_PARAM_FUNCTION_NAME}" \
+              VpcId="${STACK_PARAM_VPC_ID}" \
+              SubnetIds="${STACK_PARAM_SUBNET_IDS}" \
+              SecurityGroupIds="${STACK_PARAM_SECURITY_GROUP_IDS}" \
+              ExecutionRoleArn="${STACK_PARAM_EXECUTION_ROLE_ARN}" \
+              TerraformBackendAutoS3Bucket="${STACK_PARAM_TERRAFORM_BACKEND_AUTO_S3_BUCKET}" \
+              TerraformBackendAutoS3DynamodbTable="${STACK_PARAM_TERRAFORM_BACKEND_AUTO_S3_DYNAMODB_TABLE}"
+
+  test:
+    cmds:
+      - task: tests:test-all
+
+  cleanup:
+    cmds:
+      - rm -rf dist
+      - rm -rf .venv
+      - rm src/terraform

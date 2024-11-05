@@ -1,0 +1,131 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFormation Custom Resource - Terraform Configuration
+
+Parameters:
+  FunctionName:
+    Description: Name of the lambda function
+    Type: String
+    Default: cloudformation-custom-resource-terraform
+  VpcId:
+    Description: Specify if the lambda function needs to access resources in your VPC
+    Type: String
+    Default: ""
+  SubnetIds:
+    Description: Specify if the lambda function needs to access resources in your VPC
+    Type: CommaDelimitedList
+    Default: ""
+  SecurityGroupIds:
+    Description: Security Group IDs for the lambda function
+    Type: CommaDelimitedList
+    Default: ""
+  ExecutionRoleArn:
+    Description: Execution role ARN for the lambda function
+    Type: String
+    Default: ""
+  TerraformBackendAutoS3Bucket:
+    Description: Name of bucket to store Terraform states if using S3 backend with Auto backend configuration. The bucket should be accessible by CloudFormation during stack deployment.
+    Type: String
+    Default: ""
+  TerraformBackendAutoS3DynamodbTable:
+    Description: DynamoDB table for state locking and consistency checking. Relevant if using S3 backend with Auto backend configuration.
+    Type: String
+    Default: ""
+
+Conditions:
+  IsVpcDeployment: !Not [!Equals [!Ref VpcId, "" ]]
+  CreateLambdaExecutionRole: !Equals [!Ref ExecutionRoleArn, ""]
+  CreateSecurityGroup: !And [!Condition IsVpcDeployment, !Equals [!Join [",", !Ref SecurityGroupIds], ""]]
+
+Resources:
+  LambdaFunctionCloudformationCustomResourceTerraform:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref FunctionName
+      Description: Lambda function for CloudFormation Custom Resources - Terraform Configuration
+      Runtime: python3.12
+      Code: ../dist/lambda-package/
+      Environment:
+        Variables:
+          TERRAFORM_BACKEND_S3_BUCKET: !Ref TerraformBackendAutoS3Bucket
+          TERRAFORM_BACKEND_S3_DYNAMODB_TABLE: !Ref TerraformBackendAutoS3DynamodbTable
+      Handler: main.handler
+      Timeout: 900
+      MemorySize: 1024
+      EphemeralStorage:
+        Size: 1024
+      Role:
+        !If
+        - CreateLambdaExecutionRole
+        - !GetAtt IamRoleLambdaExecution.Arn
+        - !Ref ExecutionRoleArn
+      VpcConfig:
+        !If
+        - IsVpcDeployment
+        - SubnetIds: !Ref SubnetIds
+          SecurityGroupIds:
+            !If
+              - CreateSecurityGroup
+              - [!Ref Ec2SecurityGroupLambda]
+              - !Ref SecurityGroupIds
+        - !Ref AWS::NoValue
+
+  IamRoleLambdaExecution:
+    Type: AWS::IAM::Role
+    Condition: CreateLambdaExecutionRole
+    Properties:
+      RoleName: !Sub "${FunctionName}-execution"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [lambda.amazonaws.com]
+            Action: [sts:AssumeRole]
+      Policies:
+        - PolicyName: LambdaAdminPermissions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: "*"
+                Resource: "*"
+              - Effect: Deny
+                Action:
+                  - route53domains:AcceptDomainTransferFromAnotherAwsAccount
+                  - route53domains:AssociateDelegationSignerToDomain
+                  - route53domains:CancelDomainTransferToAnotherAwsAccount
+                  - route53domains:DeleteDomain
+                  - route53domains:DisableDomainAutoRenew
+                  - route53domains:DisableDomainTransferLock
+                  - route53domains:DisassociateDelegationSignerFromDomain
+                  - route53domains:EnableDomainAutoRenew
+                  - route53domains:EnableDomainTransferLock
+                  - route53domains:PushDomain
+                  - route53domains:RegisterDomain
+                  - route53domains:RejectDomainTransferFromAnotherAwsAccount
+                  - route53domains:RenewDomain
+                  - route53domains:ResendContactReachabilityEmail
+                  - route53domains:ResendOperationAuthorization
+                  - route53domains:RetrieveDomainAuthCode
+                  - route53domains:TransferDomain
+                  - route53domains:TransferDomainToAnotherAwsAccount
+                  - route53domains:UpdateDomainContact
+                  - route53domains:UpdateDomainContactPrivacy
+                  - route53domains:UpdateDomainNameservers
+                Resource: "*"
+
+  Ec2SecurityGroupLambda:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateSecurityGroup
+    Properties:
+      GroupName: !Sub "${FunctionName}-lambda"
+      GroupDescription: Cloudformation Custom Resource Terraform Lambda
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+
+Outputs:
+  ServiceToken:
+    Value: !GetAtt LambdaFunctionCloudformationCustomResourceTerraform.Arn
+    Description: The ARN of the Lambda Function to be used by CloudFormation Custom Resources

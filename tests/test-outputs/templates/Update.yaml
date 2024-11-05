@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFormation Custom Resource Terraform Configuration Test
+
+Parameters:
+  ServiceToken:
+    Type: String
+    Description: Service Token to use in Custom Resources
+
+Resources:
+  CustomTerraformConfigurationOutputs:
+    Type: Custom::TerraformConfiguration
+    Properties:
+      ServiceToken: !Ref ServiceToken
+      Configuration: |
+        terraform {
+          backend "local" {}
+        }
+
+        output "string" {
+          value = "update success"
+        }
+
+        output "number" {
+          value = 2
+        }
+
+        output "bool" {
+          value = false
+        }
+
+        output "list" {
+          value = ["update", "success", "!"]
+        }
+
+        output "set" {
+          value = ["update", "success", "!"]
+        }
+
+        output "map" {
+          value = jsonencode({"Key1":"update", "Key2":"success", "Key3":"!"})
+        }
+
+Outputs:
+  String:
+    Value: !GetAtt CustomTerraformConfigurationOutputs.string
+    Description: "String output from Terraform"
+
+  Number:
+    Value: !GetAtt CustomTerraformConfigurationOutputs.number
+    Description: "Number output from Terraform"
+
+  Boolean:
+    Value: !GetAtt CustomTerraformConfigurationOutputs.bool
+    Description: "Bool output from Terraform"
+
+  List:
+    Value: !Join [", ", !GetAtt CustomTerraformConfigurationOutputs.list]
+    Description: "List output from Terraform"
+
+  Set:
+    Value: !Join [", ", !GetAtt CustomTerraformConfigurationOutputs.set]
+    Description: "Set output from Terraform"
+
+  MapAsString:
+    Value: !GetAtt CustomTerraformConfigurationOutputs.map
+    Description: "Map output from Terraform"

@@ -1,0 +1,51 @@
+version: "3"
+
+set:
+  - errexit
+  - nounset
+  - pipefail
+
+includes:
+  lib:
+    taskfile: ../lib.yaml
+
+tasks:
+  run-test:
+    desc: Tests that malformed Terraform configuration is handled properly
+    cmds:
+      - echo "--- --- --- --- ---"
+      - defer: { task: cleanup }
+      - task: set-up
+      - task: create
+
+  set-up:
+    cmds:
+      - task: lib:set-up:empty
+
+  create:
+    desc: "Set up resources and deploy {{.TEST_NAME}} stack for CREATE phase"
+    cmds:
+      - echo "🚀 Running CREATE phase for stack \"{{.TESTS_SOFTWARE_NAME}}-tests-{{.TEST_NAME}}\""
+      - task: lib:deploy-stack
+        vars:
+          TEST_NAME: "{{.TEST_NAME}}"
+          TEMPLATE_FILE: templates/Create.yaml
+      - task: lib:assert-stack-status
+        vars:
+          TEST_NAME: "{{.TEST_NAME}}"
+          EXPECTED_STATUS: ROLLBACK_COMPLETE
+      - task: lib:assert-resource-present
+        vars:
+          TEST_NAME: "{{.TEST_NAME}}"
+          RESOURCE_ID: CustomTerraformConfigurationMalformed
+      - task: lib:assert-events-contain
+        vars:
+          TEST_NAME: "{{.TEST_NAME}}"
+          EXPECTED_REASON: 'Error: Missing name for resource\n\n  on terraform.tf line 2, in resource \"asdfgh\"'
+
+  cleanup:
+    desc: "Clean up the {{.TEST_NAME}} stack after tests"
+    cmds:
+      - task: lib:cleanup
+        vars:
+          TEST_NAME: "{{.TEST_NAME}}"

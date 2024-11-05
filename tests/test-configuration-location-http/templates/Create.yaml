@@ -1,0 +1,25 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFormation Custom Resource Terraform Configuration Test
+
+Parameters:
+  ServiceToken:
+    Type: String
+    Description: Service Token to use in Custom Resources
+  S3Bucket:
+    Type: String
+    Description: Name of bucket to store Terraform configuration
+  S3Prefix:
+    Type: String
+    Description: Prefix for Terraform configuration name
+
+Resources:
+  CustomTerraformConfigurationLocationHttp:
+    Type: Custom::TerraformConfiguration
+    Properties:
+      ServiceToken: !Ref ServiceToken
+      Configuration: !Sub "https://${S3Bucket}.s3.amazonaws.com/${S3Prefix}/configuration-location-http/resources/create.tf"
+
+Outputs:
+  Result:
+    Value: !GetAtt CustomTerraformConfigurationLocationHttp.result
+    Description: "Result output from Terraform"
