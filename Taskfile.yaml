@@ -55,7 +55,7 @@ tasks:
 
         # Deploy
         aws cloudformation deploy \
-          --stack-name "cloudformation-custom-resource-terraform" \
+          --stack-name "${CLOUDFORMATION_STACK_NAME}" \
           --s3-bucket "${CLOUDFORMATION_DEPLOYMENT_S3_BUCKET}"  \
           --s3-prefix "${CLOUDFORMATION_DEPLOYMENT_S3_PREFIX}" \
           --template-file "${TEMP_TEMPLATE_FILE}" \

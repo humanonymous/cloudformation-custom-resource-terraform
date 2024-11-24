@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cloudformation-custom-resource-terraform"
-version = "0.0.1"
+version = "0.0.2"
 description = "CloudFormation Custom Resource - Terraform Configuration"
 package-mode = false
 authors = ["Humanonymous <row_pattern_0z@icloud.com>"]
